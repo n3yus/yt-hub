@@ -1,7 +1,7 @@
 ---
 name: ythub-profil
 description: Kanal-Profil (channel.md) und bei eigenen Kanälen den Style-Guide (style-guide.md) für einen Kanal im YT-Hub-Datenordner aus seinen Videos ableiten. Nutzen bei Aufträgen vom Typ "Kanal-Profil entwerfen".
-ythub-version: 2
+ythub-version: 3
 ---
 
 # Kanal-Profil entwerfen

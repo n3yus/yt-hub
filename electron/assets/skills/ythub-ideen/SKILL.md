@@ -1,7 +1,7 @@
 ---
 name: ythub-ideen
 description: Videoideen für einen YouTube-Kanal im YT-Hub-Datenordner recherchieren oder aus einem erfolgreichen Vorbild-Video ableiten und als Ideen-Karten speichern. Nutzen bei Aufträgen vom Typ "Ideen recherchieren" oder "Idee aus Video".
-ythub-version: 2
+ythub-version: 3
 ---
 
 # Videoideen recherchieren
@@ -9,6 +9,7 @@ ythub-version: 2
 ## 1. Kanal verstehen
 - `channels/<kanal>/channel.md` und `style-guide.md` lesen: Nische, Zielgruppe, Ton, Formate.
 - `channels/<kanal>/videos.json`: Was läuft beim eigenen Kanal gut (hoher `score`), was nicht? Shorts und lange Videos getrennt betrachten.
+- Falls vorhanden `channels/<kanal>/analytics.json` und der Abschnitt `## Learnings` in `channel.md`: Ideen bevorzugen, die zu dem passen, was nachweislich hält (`avgViewPercent`) und Abos bringt.
 - Vorhandene Ideen in `ideas/` überfliegen, um **keine Dubletten** zu erzeugen.
 
 ## 2. Quellen

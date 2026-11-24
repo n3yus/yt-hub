@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { createSettingsStore } = require('./settings.cjs');
@@ -9,6 +9,9 @@ const { syncChannel } = require('./sync.cjs');
 const { createJobManager, installAssets, listIdeas } = require('./jobs.cjs');
 const { createContentStore } = require('./content.cjs');
 const { createUpdater } = require('./updater.cjs');
+const { createGoogleAuth } = require('./google.cjs');
+const { syncAnalytics, readAnalytics } = require('./analytics.cjs');
+const { createScheduler } = require('./schedules.cjs');
 
 const isDev = process.env.YTHUB_DEV === '1';
 const smoke = process.env.YTHUB_SMOKE === '1';
@@ -28,6 +31,29 @@ let youtube;
 let jobs;
 let content;
 let updater;
+let google;
+let scheduler;
+
+// Desktop-Benachrichtigung, wenn ein Auftrag fertig ist – immer bei geplanten,
+// sonst nur, wenn das Fenster gerade nicht im Vordergrund ist.
+function notifyJobFinished(job) {
+  if (smoke || !Notification.isSupported()) return;
+  if (!job.scheduled && win && !win.isDestroyed() && win.isFocused()) return;
+  const ok = job.status === 'fertig';
+  const n = new Notification({
+    title: ok ? `✅ ${job.title}` : `⚠ ${job.title}`,
+    body: (ok ? job.summary : job.error) ? String(ok ? job.summary : job.error).slice(0, 180) : job.channel ? job.channel.name : '',
+    silent: false,
+  });
+  n.on('click', () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+    win.webContents.send('navigate', `/auftraege?job=${job.id}`);
+  });
+  n.show();
+}
 
 function prepareDataDir() {
   const dir = channels.ensureDataDir();
@@ -49,6 +75,14 @@ function broadcastSync(patch) {
   if (win && !win.isDestroyed()) win.webContents.send('sync:status', { ...syncState, quota: quota.get() });
 }
 
+// YouTube-Analytics für einen eigenen, mit Google verbundenen Kanal abrufen (nichts tun, wenn nicht verbunden).
+async function syncOwnAnalytics(slug) {
+  const c = channels.list().find((x) => x.slug === slug);
+  if (!c || c.type !== 'own' || !c.youtubeId || !google.isConnected(c.youtubeId)) return null;
+  const token = await google.accessToken(c.youtubeId);
+  return syncAnalytics({ dir: channels.dirOf(slug), token });
+}
+
 // Gleicht die Kanäle nacheinander ab. Bricht ab, wenn Key fehlt/ungültig ist oder das Kontingent aufgebraucht ist.
 async function syncChannels({ slugs = null, onlyStale = false } = {}) {
   if (syncState.running) return syncState;
@@ -64,6 +98,13 @@ async function syncChannels({ slugs = null, onlyStale = false } = {}) {
     broadcastSync({ current: c.name });
     try {
       await syncChannel({ dir: channels.dirOf(c.slug), youtube });
+      if (c.type === 'own') {
+        try {
+          await syncOwnAnalytics(c.slug);
+        } catch (err) {
+          failures.push(`${c.name} (Analytics): ${err.message}`);
+        }
+      }
     } catch (err) {
       if (['noKey', 'keyInvalid', 'quota', 'network'].includes(err.reason)) {
         broadcastSync({ running: false, current: null, error: err.message, lastRun: new Date().toISOString() });
@@ -200,6 +241,53 @@ function registerIpc() {
   });
   handle('ideas:list', (slug) => listIdeas(channels.dirOf(slug)));
 
+  // ---- YouTube Analytics (Google-Anmeldung) ----
+  handle('google:status', () => google.publicView());
+  handle('google:setClient', (id, secret) => {
+    google.setClient(String(id || ''), String(secret || ''));
+    return google.publicView();
+  });
+  handle('google:connect', async (slug) => {
+    const c = channels.list().find((x) => x.slug === slug);
+    if (!c || c.type !== 'own') throw new Error('Nur eigene Kanäle lassen sich mit YouTube Analytics verbinden.');
+    const res = await google.connect();
+    if (c.youtubeId && c.youtubeId !== res.channelId) {
+      // Falschen Kanal gewählt – Verbindung nur behalten, wenn sie zu einem anderen eigenen Kanal passt.
+      if (!channels.list().some((x) => x.type === 'own' && x.youtubeId === res.channelId)) google.disconnect(res.channelId);
+      throw new Error(`Du hast den Kanal „${res.title}“ gewählt, erwartet war „${c.name}“. Bitte erneut verbinden und den richtigen Kanal auswählen.`);
+    }
+    if (!c.youtubeId) channels.setMeta(slug, { youtubeId: res.channelId });
+    try {
+      await syncOwnAnalytics(slug);
+    } catch (err) {
+      return { ...google.publicView(), warning: `Verbunden, aber die Zahlen konnten nicht geladen werden: ${err.message}` };
+    }
+    return google.publicView();
+  });
+  handle('google:disconnect', (slug) => {
+    const c = channels.list().find((x) => x.slug === slug);
+    if (c?.youtubeId) google.disconnect(c.youtubeId);
+    return google.publicView();
+  });
+  handle('analytics:get', (slug) => readAnalytics(channels.dirOf(slug)));
+  handle('analytics:sync', async (slug) => {
+    await syncOwnAnalytics(slug);
+    return readAnalytics(channels.dirOf(slug));
+  });
+
+  // ---- Geplante Aufträge ----
+  handle('schedules:list', () => scheduler.list());
+  handle('app:getAutostart', () => ({ available: app.isPackaged, enabled: app.getLoginItemSettings().openAtLogin }));
+  handle('app:setAutostart', (on) => {
+    if (!app.isPackaged) throw new Error('Autostart gibt es nur in der installierten App.');
+    app.setLoginItemSettings({ openAtLogin: !!on, args: ['--hidden'] });
+    return { available: true, enabled: app.getLoginItemSettings().openAtLogin };
+  });
+  handle('schedules:save', (plan) => scheduler.save(plan || {}));
+  handle('schedules:remove', (id) => scheduler.remove(id));
+  handle('schedules:setEnabled', (id, on) => scheduler.setEnabled(id, !!on));
+  handle('schedules:runNow', (id) => scheduler.runNow(id));
+
   // ---- Inhalte: Ideen-Board, Skripte, Kommentare ----
   handle('content:ideas', (slug) => content.listIdeas(slug));
   handle('content:scripts', (slug) => content.listScripts(slug));
@@ -266,6 +354,9 @@ function createWindow() {
 
   if (isDev) win.loadURL('http://localhost:5173');
   else win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+
+  // Mit Windows gestartet: minimiert in der Taskleiste bleiben.
+  if (process.argv.includes('--hidden')) win.once('ready-to-show', () => win.minimize());
 
   if (smoke) runSmoke();
 }
@@ -364,6 +455,68 @@ async function runSmoke() {
     await shot('16-skript-ansicht');
     await js(`location.hash = '#/kanal/${ch}?tab=profil'`);
     await shot('17-profil');
+    // Phase 4: Statistik mit Beispielzahlen, Google-Einstellungen, Zeitpläne.
+    {
+      const days = [];
+      for (let i = 56; i >= 1; i--) {
+        const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+        const base = 900 + Math.round(400 * Math.sin(i / 4)) + (56 - i) * 18 + (i === 9 ? 2600 : 0);
+        days.push({ day: d, views: base, watchMinutes: Math.round(base * 3.1), subscribersGained: Math.round(base / 90), subscribersLost: Math.round(base / 400) });
+      }
+      const { sumRange } = require('./analytics.cjs');
+      const asRows = days.map((x) => ({ day: x.day, views: x.views, estimatedMinutesWatched: x.watchMinutes, subscribersGained: x.subscribersGained, subscribersLost: x.subscribersLost, averageViewDuration: 185 }));
+      const fixtureAnalytics = {
+        fetchedAt: new Date().toISOString(),
+        range: { from: days[0].day, to: days[days.length - 1].day },
+        last28: sumRange(asRows, days[28].day, days[55].day),
+        prev28: { ...sumRange(asRows, days[0].day, days[27].day), avgViewDurationSec: 171 },
+        daily: days,
+        ctrAvailable: true,
+        videos: [
+          ['7 versteckte Windows-Funktionen', 18400, 46.2, 251, 140, 7.9],
+          ['Ich teste das billigste Setup', 12100, 38.5, 233, 61, 6.1],
+          ['Der größte Fehler meiner Karriere', 6400, 52.8, 318, 44, 4.2],
+          ['So spart man 3 Stunden pro Woche', 5200, 31.0, 160, 12, 5.5],
+          ['Akku-Trick (Short)', 22900, 88.4, 40, 95, 3.1],
+        ].map(([title, views, p, sec, subs, ctr], i) => ({ id: `vid${i}`, title, views, watchMinutes: Math.round((views * sec) / 60), avgViewDurationSec: sec, avgViewPercent: p, subscribersGained: subs, likes: Math.round(views / 30), impressions: Math.round((views / ctr) * 100), ctr })),
+      };
+      fs.writeFileSync(path.join(channels.dirOf(ch), 'analytics.json'), JSON.stringify(fixtureAnalytics, null, 2));
+      await js(`location.hash = '#/kanal/${ch}?tab=statistik'`);
+      await wait(400);
+      await js(`(() => { const svg = document.querySelector('svg.chart'); const r = svg.getBoundingClientRect(); svg.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.left + r.width * 0.84, clientY: r.top + 40 })); })()`);
+      await shot('20-statistik');
+      report.analyticsView = await js(`[...document.querySelectorAll('.kpi')].map((k) => k.innerText.replace(/\\n/g, ' | '))`);
+      await js(`window.ythub.saveSchedule({ type: 'research', channel: '${ch}', freq: 'weekly', weekday: 1, hour: 8, count: 5, note: 'Fokus auf Shorts' })`);
+      await js(`window.ythub.saveSchedule({ type: 'learnings', channel: '${ch}', freq: 'weekly', weekday: 0, hour: 20 })`);
+      report.schedules = (await js(`window.ythub.listSchedules()`)).map((p) => `${p.type}: ${p.label} → ${p.nextRun}`);
+      await js(`location.hash = '#/auftraege'`);
+      await shot('21-auftraege-geplant');
+      await js(`document.querySelector('.section-title-row .btn').click()`);
+      await shot('22-plan-dialog');
+      await js(`window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); document.querySelector('.overlay .btn.ghost:not(.danger)')?.click()`);
+      await js(`location.hash = '#/settings'`);
+      await wait(300);
+      await js(`[...document.querySelectorAll('.link')].find((b) => b.textContent.includes('So richtest'))?.click(); document.querySelectorAll('.panel')[2]?.scrollIntoView()`);
+      await shot('23-einstellungen-google');
+      report.googleSetClientBad = await js(`window.ythub.setGoogleClient('falsch', 'x').then(() => 'angenommen (Fehler!)', (e) => 'abgelehnt: ' + e.message)`);
+      report.googleSetClient = (await js(`window.ythub.setGoogleClient('123-abc.apps.googleusercontent.com', 'GOCSPX-test')`)).client;
+      report.googleSecretPlain = fs.readFileSync(path.join(app.getPath('userData'), 'google-auth.json'), 'utf8').includes('GOCSPX-test');
+    }
+
+    if (process.env.YTHUB_SMOKE_CLAUDE === 'learnings') {
+      const lj = await js(`window.ythub.createJob({ type: 'learnings', channel: '${ch}', mode: 'background', note: 'Testlauf: kurz halten.' })`);
+      const started = Date.now();
+      let j = jobs.get(lj.id);
+      while (['wartet', 'läuft'].includes(j.status) && Date.now() - started < 9 * 60000) {
+        await wait(3000);
+        j = jobs.get(lj.id);
+      }
+      report.learningsJob = { status: j.status, summary: j.summary, outputs: j.outputs, error: j.error, costUsd: j.costUsd, durationMs: j.durationMs };
+      report.channelMdAfter = fs.readFileSync(path.join(channels.dirOf(ch), 'channel.md'), 'utf8');
+      await js(`location.hash = '#/kanal/${ch}?tab=profil'`);
+      await shot('24-profil-mit-learnings');
+    }
+
     report.ideasApi = await js(`window.ythub.ideas('${ch}')`);
     report.scriptsApi = await js(`window.ythub.scripts('${ch}')`);
     report.moveStatus = (await js(`window.ythub.setDocStatus('${ch}', 'ideas/2026-11-20-akku-trick.md', 'favorit')`)).fm.status;
@@ -448,6 +601,7 @@ async function runSmoke() {
 }
 
 app.whenReady().then(() => {
+  app.setAppUserModelId('app.ythub.desktop'); // nötig für Windows-Benachrichtigungen
   settings = createSettingsStore({
     userDataDir: app.getPath('userData'),
     documentsDir: app.getPath('documents'),
@@ -466,6 +620,13 @@ app.whenReady().then(() => {
     getChannel: (slug) => channels.list().find((c) => c.slug === slug) || null,
     findClaude,
     onChange: broadcastJobs,
+    onFinished: notifyJobFinished,
+  });
+  google = createGoogleAuth({ userDataDir: app.getPath('userData'), safeStorage, openExternal: (u) => shell.openExternal(u) });
+  scheduler = createScheduler({
+    getDataDir: () => settings.load().dataDir,
+    createJob: (input) => jobs.create(input),
+    onChange: () => win && !win.isDestroyed() && win.webContents.send('schedules:update', scheduler.list()),
   });
   updater = createUpdater({
     app,
@@ -477,6 +638,9 @@ app.whenReady().then(() => {
   setInterval(() => jobs.poll(), 3000); // Ergebnisse von Terminal-Aufträgen einsammeln
   if (!smoke) {
     win.webContents.once('did-finish-load', () => autoSync());
+    // Geplante Aufträge: kurz nach dem Start (verpasste nachholen), dann jede Minute.
+    setTimeout(() => scheduler.tick(), 15000);
+    setInterval(() => scheduler.tick(), 60000);
     // Bei „täglich“ auch bei lange offener App einmal pro Stunde nachsehen.
     setInterval(() => settings.load().checkInterval === 'daily' && syncChannels({ onlyStale: true }), 3600000);
   }

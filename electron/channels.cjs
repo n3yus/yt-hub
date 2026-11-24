@@ -174,7 +174,13 @@ function createChannelStore(getDataDir) {
     return items.sort((a, b) => (a.publishedAt < b.publishedAt ? 1 : -1));
   }
 
-  return { ensureDataDir, list, add, dirOf, feed };
+  function setMeta(slug, patch) {
+    const file = path.join(dirOf(slug), 'channel.json');
+    const meta = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ ...meta, ...patch }, null, 2), 'utf8');
+  }
+
+  return { ensureDataDir, list, add, dirOf, feed, setMeta };
 }
 
 module.exports = { createChannelStore, parseChannelInput, slugify };

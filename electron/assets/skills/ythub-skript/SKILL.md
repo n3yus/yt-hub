@@ -1,7 +1,7 @@
 ---
 name: ythub-skript
 description: Ein YouTube-Skript für einen eigenen Kanal im YT-Hub-Datenordner schreiben oder überarbeiten – aus einer Ideen-Datei, im Stil des Kanals. Nutzen bei Aufträgen vom Typ "Skript schreiben" oder "Skript überarbeiten".
-ythub-version: 2
+ythub-version: 3
 ---
 
 # Skript schreiben
@@ -9,6 +9,7 @@ ythub-version: 2
 ## 1. Grundlage
 - Ideen-Datei aus dem Auftrag lesen (Hook, Inhalt, Quellen).
 - `channel.md` und `style-guide.md` des Kanals: Ton, Ansprache (du/ihr/Sie), typische Länge, Do's & Don'ts.
+- Falls vorhanden: Abschnitt `## Learnings` in `channel.md` beachten (z. B. welche Hooks und Längen die Leute halten).
 - Wenn der Style-Guide noch leer ist: neutral-locker schreiben und am Ende unter „Hinweise“ vermerken.
 - Fakten bei Bedarf per Websuche prüfen. Nichts erfinden.
 

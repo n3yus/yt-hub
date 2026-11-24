@@ -1,4 +1,4 @@
-<!-- ythub-version: 2 -->
+<!-- ythub-version: 3 -->
 # YT Hub – Datenordner
 
 Dieser Ordner gehört zur Desktop-App **YT Hub**. Die App legt hier Kanäle an, holt YouTube-Daten und schickt dir
@@ -14,6 +14,7 @@ channels/<kanal>/
   style-guide.md    nur eigene Kanäle: Stilregeln für Skripte
   competitors.json  nur eigene Kanäle: Slugs zugeordneter beobachteter Kanäle
   videos.json       letzte Uploads mit Aufrufen und Ausreißer-Wert (von der App gepflegt – nur lesen)
+  analytics.json    nur verbundene eigene Kanäle: YouTube-Analytics-Zahlen (Bindung, Klickrate, Abos) – nur lesen
   ideas/            eine Markdown-Datei pro Idee (status: neu | favorit | in-arbeit | produziert | veroeffentlicht | verworfen)
   scripts/          nur eigene Kanäle: eine Markdown-Datei pro Skript (status: entwurf | ueberarbeitung | fertig);
                     <skript>.comments.json = Kommentare des Creators (nur lesen)

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ago } from '../format.js';
 import { hashQuery } from '../router.js';
 import { JOB_TYPES, STATUS, openJobDialog } from '../jobDialog.js';
+import Schedules from '../components/Schedules.jsx';
 
 const icon = (type) => JOB_TYPES.find((t) => t.id === type)?.icon || '✳️';
 
@@ -55,6 +56,8 @@ export default function Jobs({ jobs }) {
           </div>
         </section>
       )}
+      <Schedules />
+
       {done.length > 0 && (
         <section>
           <h2 className="section-title">Erledigt <span className="count">{done.length}</span></h2>

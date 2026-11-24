@@ -72,7 +72,8 @@ export default function App() {
     reloadSettings();
     const onJob = (e) => setJobPreset(e.detail || {});
     window.addEventListener('ythub:new-job', onJob);
-    return () => window.removeEventListener('ythub:new-job', onJob);
+    const offNav = window.ythub.onNavigate((r) => go(r));
+    return () => { window.removeEventListener('ythub:new-job', onJob); offNav(); };
   }, [reloadSettings]);
 
   // Wenn ein Auftrag fertig wird, sollen Kanal-Karten (Ideen/Skripte) neu zählen.

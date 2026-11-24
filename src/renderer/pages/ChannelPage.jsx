@@ -6,10 +6,12 @@ import IdeaBoard from '../components/IdeaBoard.jsx';
 import ScriptList from '../components/ScriptList.jsx';
 import DocPanel from '../components/DocPanel.jsx';
 import Markdown from '../markdown.jsx';
+import StatsTab from '../components/StatsTab.jsx';
 
 const TABS_OWN = [
   ['ideen', 'Ideen'],
   ['skripte', 'Skripte'],
+  ['statistik', 'Statistik'],
   ['profil', 'Profil'],
   ['recherche', 'Recherche'],
 ];
@@ -93,6 +95,7 @@ export default function ChannelPage({ slug, dataVersion }) {
 
       {active === 'ideen' && <IdeaBoard slug={slug} own={own} dataVersion={dataVersion} />}
       {active === 'skripte' && <ScriptList slug={slug} dataVersion={dataVersion} />}
+      {active === 'statistik' && <StatsTab channel={channel} dataVersion={dataVersion} />}
       {active === 'profil' && <ProfileTab channel={channel} dataVersion={dataVersion} />}
       {active === 'recherche' && <ResearchTab slug={slug} own={own} dataVersion={dataVersion} />}
     </div>

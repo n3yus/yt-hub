@@ -207,7 +207,95 @@ export function GeneralSection({ settings, onSettings }) {
           <option value="en">Englisch</option>
         </select>
       </label>
+      <AutostartRow />
     </section>
+  );
+}
+
+const OAUTH_GUIDE = 'https://console.cloud.google.com/apis/credentials';
+
+function GoogleSection() {
+  const [st, setSt] = useState(null);
+  const [id, setId] = useState('');
+  const [secret, setSecret] = useState('');
+  const [msg, setMsg] = useState(null);
+  const [help, setHelp] = useState(false);
+  useEffect(() => { window.ythub.googleStatus().then(setSt); }, []);
+  if (!st) return null;
+
+  const save = async () => {
+    try {
+      setSt(await window.ythub.setGoogleClient(id, secret));
+      setId('');
+      setSecret('');
+      setMsg({ ok: true, text: 'Gespeichert. Verbinde jetzt deine eigenen Kanäle auf ihrer Seite unter „Statistik“.' });
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    }
+  };
+  const remove = async () => {
+    if (!window.confirm('OAuth-Client entfernen? Verbundene Kanäle können dann keine neuen Zahlen mehr laden.')) return;
+    setSt(await window.ythub.setGoogleClient('', ''));
+  };
+  const conns = Object.entries(st.connections);
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>YouTube Analytics (optional)</h2>
+        {st.client.set ? <span className="pill ok">eingerichtet</span> : <span className="pill">nicht eingerichtet</span>}
+      </div>
+      <p className="muted">
+        Für echte Zahlen deiner eigenen Kanäle (Wiedergabezeit, angesehener Anteil, Klickrate, Abos) meldet sich YT Hub bei Google an.
+        Dafür brauchst du einmalig einen eigenen OAuth-Client vom Typ „Desktop-App“. Client-Secret und Anmeldungen werden verschlüsselt nur auf diesem Rechner gespeichert.{' '}
+        <button className="link" onClick={() => setHelp((h) => !h)}>{help ? 'Anleitung ausblenden' : 'So richtest du das ein'}</button>
+      </p>
+      {help && (
+        <ol className="guide">
+          <li>In der <button className="link" onClick={() => window.ythub.openExternal(OAUTH_GUIDE)}>Google Cloud Console</button> dasselbe Projekt wie für den API-Key öffnen.</li>
+          <li>Unter „APIs &amp; Dienste → Bibliothek“ die <strong>YouTube Analytics API</strong> aktivieren.</li>
+          <li>„OAuth-Zustimmungsbildschirm“ einrichten: Typ <strong>Extern</strong>, Status „Testen“, dein Google-Konto als <strong>Testnutzer</strong> eintragen.</li>
+          <li>„Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID“, Anwendungstyp <strong>Desktop-App</strong>.</li>
+          <li>Client-ID und Client-Secret hier eintragen.</li>
+        </ol>
+      )}
+      {st.client.set && <p className="mono small">{st.client.id}</p>}
+      <div className="row">
+        <input value={id} onChange={(e) => setId(e.target.value)} placeholder="Client-ID (…apps.googleusercontent.com)" spellCheck={false} />
+        <input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Client-Secret" autoComplete="off" spellCheck={false} />
+        <button className="btn primary" disabled={!id.trim() || !secret.trim()} onClick={save}>{st.client.set ? 'Ersetzen' : 'Speichern'}</button>
+        {st.client.set && <button className="btn ghost small danger" onClick={remove}>Entfernen</button>}
+      </div>
+      {msg && <div className={'notice ' + (msg.ok ? 'ok' : 'error')}>{msg.text}</div>}
+      {conns.length > 0 && (
+        <div className="conn-list">
+          <span className="muted small">Verbundene Kanäle</span>
+          {conns.map(([cid, c]) => (
+            <div key={cid} className="conn">
+              <span>📊 {c.title}</span>
+              <span className="muted small">seit {new Date(c.connectedAt).toLocaleDateString('de-DE')}</span>
+              {c.error && <span className="err-text small">{c.error}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AutostartRow() {
+  const [st, setSt] = useState(null);
+  useEffect(() => { window.ythub.getAutostart().then(setSt); }, []);
+  if (!st) return null;
+  return (
+    <label className="field inline">
+      <span>
+        Mit Windows starten (minimiert)
+        <br />
+        <small className="muted">Damit geplante Aufträge auch laufen, ohne dass du YT Hub öffnest.{!st.available ? ' Nur in der installierten App.' : ''}</small>
+      </span>
+      <input type="checkbox" className="toggle" disabled={!st.available} checked={st.enabled} onChange={async (e) => setSt(await window.ythub.setAutostart(e.target.checked))} />
+    </label>
   );
 }
 
@@ -266,6 +354,7 @@ export default function Settings({ settings, onSettings }) {
       </header>
       <YoutubeKeySection settings={settings} onSettings={onSettings} />
       <ClaudeSection settings={settings} onSettings={onSettings} />
+      <GoogleSection />
       <DataDirSection settings={settings} onSettings={onSettings} />
       <GeneralSection settings={settings} onSettings={onSettings} />
       {info && <UpdateSection version={info.version} />}

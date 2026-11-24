@@ -2,7 +2,7 @@
 
 Desktop-App für YouTube-Kanäle: eigene und beobachtete Kanäle verwalten, Ideen recherchieren und Skripte schreiben – mit Aufträgen an Claude Code. Konzept: [KONZEPT.md](KONZEPT.md).
 
-**Stand: Phase 3** – Kanal-Seite mit Ideen-Board (Drag & Drop, eigene Ideen, Details), Skript-Ansicht (Sprechdauer, Kommentare an Absätzen, Überarbeiten-Auftrag, Versionen, Bearbeiten), Profil- und Recherche-Tab, automatische Updates (vorbereitet); dazu Aufträge an Claude Code (Ideen recherchieren, Idee aus Video, Skript schreiben, Kanal-Profil, freier Auftrag; im Hintergrund oder im Terminal) mit Auftrags-Liste und Fortschritt, Skills im Datenordner; dazu Willkommens-Assistent, Kanäle per ＋-Knopf (mit YouTube-Abgleich: Name, Bild, Abos, letzte 50 Videos), Feed der beobachteten Kanäle mit Ausreißer-Erkennung, Prüfintervall, Kontingent-Anzeige, Einstellungsseite, Windows-Installer.
+**Stand: Phase 4** – YouTube Analytics für eigene Kanäle (Google-Anmeldung mit eigenem OAuth-Client, Statistik-Tab mit Kennzahlen, Verlauf und Video-Tabelle), Auftrag „Learnings ableiten“, geplante Aufträge mit Desktop-Benachrichtigung, Autostart; dazu Kanal-Seite mit Ideen-Board (Drag & Drop, eigene Ideen, Details), Skript-Ansicht (Sprechdauer, Kommentare an Absätzen, Überarbeiten-Auftrag, Versionen, Bearbeiten), Profil- und Recherche-Tab, automatische Updates (vorbereitet); dazu Aufträge an Claude Code (Ideen recherchieren, Idee aus Video, Skript schreiben, Kanal-Profil, freier Auftrag; im Hintergrund oder im Terminal) mit Auftrags-Liste und Fortschritt, Skills im Datenordner; dazu Willkommens-Assistent, Kanäle per ＋-Knopf (mit YouTube-Abgleich: Name, Bild, Abos, letzte 50 Videos), Feed der beobachteten Kanäle mit Ausreißer-Erkennung, Prüfintervall, Kontingent-Anzeige, Einstellungsseite, Windows-Installer.
 
 ## Entwickeln
 
@@ -27,6 +27,9 @@ electron/
   sync.cjs       Kanal-Abgleich: Kanaldaten, letzte Uploads (videos.json), Ausreißer
   jobs.cjs       Aufträge: Auftrag-Datei schreiben, Claude Code starten (claude -p / Terminal), Fortschritt, Ergebnis-Datei
   content.cjs    Ideen, Skripte, Recherche, Kommentare lesen/schreiben (nur erlaubte Pfade im Kanal-Ordner)
+  google.cjs     Google-Anmeldung (OAuth Desktop, Loopback + PKCE), Tokens verschlüsselt
+  analytics.cjs  YouTube-Analytics-Abruf → analytics.json im Kanal-Ordner
+  schedules.cjs  geplante Aufträge (auftraege/plaene.json), Nachholen verpasster Termine
   updater.cjs    automatische Updates (electron-updater), aktiv sobald ein publish-Ziel eingerichtet ist
   assets/        CLAUDE.md und Skills (ythub-ideen, ythub-skript, ythub-profil), werden in den Datenordner kopiert
   fake-youtube.cjs  feste Testdaten für npm run smoke (kein Netz, kein Kontingent)

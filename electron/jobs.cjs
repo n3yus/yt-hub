@@ -14,6 +14,7 @@ const TYPES = {
   profile: { label: 'Kanal-Profil entwerfen', skill: 'ythub-profil' },
   script: { label: 'Skript schreiben', skill: 'ythub-skript', needsOwn: true },
   revise: { label: 'Skript überarbeiten', skill: 'ythub-skript', needsOwn: true },
+  learnings: { label: 'Learnings ableiten', skill: 'ythub-learnings', needsOwn: true },
   free: { label: 'Freier Auftrag', skill: null },
 };
 
@@ -108,6 +109,10 @@ Speichere es in \`${dir}scripts/\`.`;
       return `Überarbeite das Skript \`${dir}${input.script}\` für den Kanal **${channel.name}** (Regeln für Überarbeitungen im Skill beachten).
 Setze die Kommentare des Creators gezielt um; alles andere bleibt, wie es ist.${list ? `\n\nKommentare:\n${list}` : ''}`;
     }
+    case 'learnings':
+      return `Leite aus den Zahlen des Kanals **${channel.name}** (\`${dir}\`) ab, was beim Publikum funktioniert und was nicht.
+Grundlage: \`${dir}analytics.json\` (YouTube Analytics, falls vorhanden) und \`${dir}videos.json\`.
+Schreibe die Erkenntnisse in den Abschnitt „## Learnings“ von \`${dir}channel.md\` und passe – wo die Zahlen es klar belegen – \`${dir}style-guide.md\` an.`;
     case 'free':
       return `${input.text || ''}${channel ? `\n\nBezug: Kanal **${channel.name}** (\`${dir}\`).` : ''}`;
     default:
@@ -165,7 +170,7 @@ function describeTool(name, input = {}) {
 
 // ---- Verwaltung ---------------------------------------------------------------
 
-function createJobManager({ getDataDir, getLanguage, getChannel, findClaude, onChange }) {
+function createJobManager({ getDataDir, getLanguage, getChannel, findClaude, onChange, onFinished = () => {} }) {
   const dir = () => path.join(getDataDir(), 'auftraege');
   const stateFile = (id) => path.join(dir(), `${id}.json`);
   const resultFile = (id) => path.join(dir(), `${id}.result.json`);
@@ -227,7 +232,8 @@ function createJobManager({ getDataDir, getLanguage, getChannel, findClaude, onC
     const job = {
       id: newId(input.type),
       type: input.type,
-      title: input.title || t.label,
+      title: input.title || (input.scheduled ? `${t.label} (geplant)` : t.label),
+      scheduled: input.scheduled || null,
       ref: input.script || input.idea || null,
       channel: channel ? { slug: channel.slug, name: channel.name, type: channel.type } : null,
       mode: input.mode === 'terminal' ? 'terminal' : 'background',
@@ -368,6 +374,7 @@ function createJobManager({ getDataDir, getLanguage, getChannel, findClaude, onC
     };
     done.progress.push({ t: done.finishedAt, text: res.status === 'fertig' ? '✅ Fertig' : `⚠ ${res.error || 'Fehler'}` });
     save(done);
+    try { onFinished(done); } catch {}
   }
 
   async function launchTerminal(job) {

@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 
 const SCOPES = ['https://www.googleapis.com/auth/yt-analytics.readonly', 'https://www.googleapis.com/auth/youtube.readonly'];
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -49,9 +50,9 @@ function createGoogleAuth({ userDataDir, safeStorage, openExternal }) {
     };
   }
 
-  // ---- Anmeldung im Browser ----
+  // ---- Anmeldung im Browser (liefert Tokens für die angefragten Berechtigungen) ----
   let pending = null;
-  async function connect() {
+  async function authorize(scopes) {
     const client = getClient();
     if (!client) throw new Error('Bitte zuerst den Google-OAuth-Client in den Einstellungen eintragen.');
     if (pending) pending.cancel('Neue Anmeldung gestartet.');
@@ -84,7 +85,7 @@ function createGoogleAuth({ userDataDir, safeStorage, openExternal }) {
           client_id: client.id,
           redirect_uri: `http://127.0.0.1:${port}`,
           response_type: 'code',
-          scope: SCOPES.join(' '),
+          scope: scopes.join(' '),
           code_challenge: challenge,
           code_challenge_method: 'S256',
           access_type: 'offline',
@@ -104,7 +105,12 @@ function createGoogleAuth({ userDataDir, safeStorage, openExternal }) {
       code_verifier: verifier,
     });
     if (!tokens.refresh_token) throw new Error('Google hat kein Refresh-Token geliefert. Bitte die Verbindung unter myaccount.google.com entfernen und erneut verbinden.');
+    return tokens;
+  }
 
+  // YouTube Analytics für einen Kanal verbinden.
+  async function connect() {
+    const tokens = await authorize(SCOPES);
     // Welcher Kanal wurde gewählt?
     const me = await apiGet('https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true', tokens.access_token);
     const ch = me.items?.[0];
@@ -115,6 +121,48 @@ function createGoogleAuth({ userDataDir, safeStorage, openExternal }) {
     write(d);
     cache.set(ch.id, { token: tokens.access_token, until: Date.now() + (tokens.expires_in - 60) * 1000 });
     return { channelId: ch.id, title: ch.snippet.title };
+  }
+
+  // ---- Google Drive für den Cloud-Sync (nur Dateien, die YT Hub selbst anlegt) ----
+  async function connectDrive() {
+    const tokens = await authorize([DRIVE_SCOPE]);
+    let user = {};
+    try {
+      user = (await apiGet('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)', tokens.access_token)).user || {};
+    } catch {}
+    const d = read();
+    d.drive = { name: user.displayName || null, email: user.emailAddress || null, refresh: enc(tokens.refresh_token), connectedAt: new Date().toISOString() };
+    write(d);
+    cache.set('drive', { token: tokens.access_token, until: Date.now() + (tokens.expires_in - 60) * 1000 });
+    return driveView();
+  }
+  function driveView() {
+    const dr = read().drive;
+    return dr ? { connected: true, name: dr.name, email: dr.email, connectedAt: dr.connectedAt, error: dr.error || null } : { connected: false };
+  }
+  function disconnectDrive() {
+    const d = read();
+    delete d.drive;
+    write(d);
+    cache.delete('drive');
+  }
+  async function driveToken() {
+    const hit = cache.get('drive');
+    if (hit && hit.until > Date.now()) return hit.token;
+    const d = read();
+    if (!d.drive) return null;
+    const client = getClient();
+    if (!client) throw new Error('Google-OAuth-Client fehlt in den Einstellungen.');
+    try {
+      const t = await tokenRequest({ client_id: client.id, client_secret: client.secret, refresh_token: dec(d.drive.refresh), grant_type: 'refresh_token' });
+      cache.set('drive', { token: t.access_token, until: Date.now() + (t.expires_in - 60) * 1000 });
+      if (d.drive.error) { delete d.drive.error; write(d); }
+      return t.access_token;
+    } catch (err) {
+      d.drive.error = err.message;
+      write(d);
+      throw err;
+    }
   }
 
   function disconnect(channelId) {
@@ -146,7 +194,7 @@ function createGoogleAuth({ userDataDir, safeStorage, openExternal }) {
     }
   }
 
-  return { getClient, setClient, publicView, connect, disconnect, accessToken, isConnected: (id) => !!read().connections?.[id] };
+  return { getClient, setClient, publicView, connect, disconnect, accessToken, isConnected: (id) => !!read().connections?.[id], connectDrive, disconnectDrive, driveToken, driveView };
 }
 
 async function tokenRequest(body) {
@@ -176,12 +224,31 @@ async function apiGet(url, token) {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const e = new Error(data.error?.message || `Google-API-Fehler ${res.status}`);
+    const reason = data.error?.errors?.[0]?.reason || data.error?.status;
+    const e = new Error(friendlyGoogleMessage(data.error?.message, reason) || `Google-API-Fehler ${res.status}`);
     e.status = res.status;
-    e.reason = data.error?.errors?.[0]?.reason || data.error?.status;
+    e.reason = reason;
     throw e;
   }
   return data;
 }
 
-module.exports = { createGoogleAuth, apiGet, SCOPES };
+const API_NAMES = {
+  'youtubeanalytics.googleapis.com': 'YouTube Analytics API',
+  'drive.googleapis.com': 'Google Drive API',
+  'youtube.googleapis.com': 'YouTube Data API v3',
+};
+
+// „API … has not been used in project … or it is disabled“ → kurzer deutscher Hinweis mit Aktivierungs-Link.
+// Die Oberfläche erkennt den Link am Ende und macht daraus einen Knopf „API aktivieren“.
+function friendlyGoogleMessage(message, reason) {
+  const msg = String(message || '');
+  const disabled = reason === 'accessNotConfigured' || reason === 'SERVICE_DISABLED' || /has not been used in project|it is disabled/i.test(msg);
+  if (!disabled) return msg;
+  const url = (/(https:\/\/console\.(?:developers|cloud)\.google\.com\/apis\/api\/[^\s"]+)/.exec(msg) || [])[1];
+  const host = url ? (/apis\/api\/([^/]+)/.exec(url) || [])[1] : null;
+  const name = API_NAMES[host] || 'benötigte Google-API';
+  return `Die ${name} ist in deinem Google-Cloud-Projekt noch nicht aktiviert. Nach dem Aktivieren 2–5 Minuten warten und erneut versuchen.${url ? ` ${url}` : ''}`;
+}
+
+module.exports = { createGoogleAuth, apiGet, SCOPES, friendlyGoogleMessage };

@@ -12,6 +12,7 @@ const { createUpdater } = require('./updater.cjs');
 const { createGoogleAuth } = require('./google.cjs');
 const { syncAnalytics, readAnalytics } = require('./analytics.cjs');
 const { createScheduler } = require('./schedules.cjs');
+const { syncFolder, createDriveClient } = require('./drivesync.cjs');
 
 const isDev = process.env.YTHUB_DEV === '1';
 const smoke = process.env.YTHUB_SMOKE === '1';
@@ -34,9 +35,54 @@ let updater;
 let google;
 let scheduler;
 
+// ---- Cloud-Sync mit Google Drive ------------------------------------------
+let cloudState = { running: false, done: 0, total: 0, last: null, error: null };
+let cloudTimer = null;
+
+function broadcastCloud(patch) {
+  cloudState = { ...cloudState, ...patch };
+  if (win && !win.isDestroyed()) win.webContents.send('cloud:status', cloudStatus());
+}
+function cloudStatus() {
+  return { ...cloudState, enabled: !!settings.load().cloudSync, drive: google.driveView() };
+}
+
+// Läuft nur, wenn eingeschaltet und verbunden. Während Claude im Hintergrund schreibt, wird verschoben.
+async function runCloudSync({ force = false } = {}) {
+  if (!settings.load().cloudSync && !force) return cloudStatus();
+  if (!google.driveView().connected) return cloudStatus();
+  if (cloudState.running) return cloudStatus();
+  if (jobs.runningCount() > 0) {
+    scheduleCloudSync(60000);
+    return cloudStatus();
+  }
+  broadcastCloud({ running: true, done: 0, total: 0, error: null });
+  try {
+    const res = await syncFolder({
+      root: settings.load().dataDir,
+      drive: createDriveClient(() => google.driveToken()),
+      stateFile: path.join(app.getPath('userData'), 'cloud-sync-state.json'),
+      trashLocal: (file) => shell.trashItem(file),
+      onProgress: (done, total) => broadcastCloud({ done, total }),
+    });
+    broadcastCloud({ running: false, last: res, error: res.errors.length ? `${res.errors.length} Datei(en) nicht synchronisiert: ${res.errors[0]}` : null });
+    // Neue/geänderte Dateien von einem anderen Rechner → Oberfläche neu laden lassen.
+    if (res.downloaded || res.deletedLocal || res.conflicts) broadcastSync({});
+  } catch (err) {
+    broadcastCloud({ running: false, error: err.message });
+  }
+  return cloudStatus();
+}
+
+function scheduleCloudSync(delay = 5000) {
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(() => runCloudSync(), delay);
+}
+
 // Desktop-Benachrichtigung, wenn ein Auftrag fertig ist – immer bei geplanten,
 // sonst nur, wenn das Fenster gerade nicht im Vordergrund ist.
 function notifyJobFinished(job) {
+  scheduleCloudSync(5000); // Ergebnisse gleich in die Cloud
   if (smoke || !Notification.isSupported()) return;
   if (!job.scheduled && win && !win.isDestroyed() && win.isFocused()) return;
   const ok = job.status === 'fertig';
@@ -276,6 +322,25 @@ function registerIpc() {
   });
 
   // ---- Geplante Aufträge ----
+  // ---- Cloud-Sync (Google Drive) ----
+  handle('cloud:status', () => cloudStatus());
+  handle('cloud:connect', async () => {
+    await google.connectDrive();
+    runCloudSync({ force: settings.load().cloudSync });
+    return cloudStatus();
+  });
+  handle('cloud:disconnect', () => {
+    google.disconnectDrive();
+    settings.update({ cloudSync: false });
+    return cloudStatus();
+  });
+  handle('cloud:setEnabled', (on) => {
+    settings.update({ cloudSync: !!on });
+    if (on) scheduleCloudSync(500);
+    return cloudStatus();
+  });
+  handle('cloud:syncNow', () => runCloudSync());
+
   handle('schedules:list', () => scheduler.list());
   handle('app:getAutostart', () => ({ available: app.isPackaged, enabled: app.getLoginItemSettings().openAtLogin }));
   handle('app:setAutostart', (on) => {
@@ -501,6 +566,17 @@ async function runSmoke() {
       report.googleSetClientBad = await js(`window.ythub.setGoogleClient('falsch', 'x').then(() => 'angenommen (Fehler!)', (e) => 'abgelehnt: ' + e.message)`);
       report.googleSetClient = (await js(`window.ythub.setGoogleClient('123-abc.apps.googleusercontent.com', 'GOCSPX-test')`)).client;
       report.googleSecretPlain = fs.readFileSync(path.join(app.getPath('userData'), 'google-auth.json'), 'utf8').includes('GOCSPX-test');
+      report.cloudOff = await js(`window.ythub.syncCloudNow().then((s) => ({ enabled: s.enabled, running: s.running, last: s.last }))`);
+      report.cloudOn = await js(`window.ythub.setCloudEnabled(true).then((s) => ({ enabled: s.enabled, connected: s.drive.connected }))`);
+      await js(`location.reload()`);
+      await loaded();
+      await js(`location.hash = '#/settings'`);
+      await wait(500);
+      await js(`[...document.querySelectorAll('.panel h2')].find((h) => h.textContent.includes('Cloud-Sync'))?.scrollIntoView({ block: 'center' })`);
+      await shot('25-einstellungen-cloud');
+      report.cloudSetting = settings.load().cloudSync;
+      await js(`window.ythub.setCloudEnabled(false)`);
+      report.cloudSettingAfterOff = settings.load().cloudSync;
     }
 
     if (process.env.YTHUB_SMOKE_CLAUDE === 'learnings') {
@@ -640,6 +716,9 @@ app.whenReady().then(() => {
     win.webContents.once('did-finish-load', () => autoSync());
     // Geplante Aufträge: kurz nach dem Start (verpasste nachholen), dann jede Minute.
     setTimeout(() => scheduler.tick(), 15000);
+    // Cloud-Sync: kurz nach dem Start, dann alle 10 Minuten (nur wenn eingeschaltet).
+    setTimeout(() => runCloudSync(), 20000);
+    setInterval(() => runCloudSync(), 10 * 60000);
     setInterval(() => scheduler.tick(), 60000);
     // Bei „täglich“ auch bei lange offener App einmal pro Stunde nachsehen.
     setInterval(() => settings.load().checkInterval === 'daily' && syncChannels({ onlyStale: true }), 3600000);

@@ -1,7 +1,7 @@
 {
   "name": "ythub",
   "productName": "YT Hub",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Desktop-Hub für YouTube-Kanäle: Kanäle beobachten, Ideen recherchieren und Skripte schreiben mit Claude Code.",
   "main": "electron/main.cjs",
   "author": "YT Hub",

@@ -82,6 +82,17 @@ contextBridge.exposeInMainWorld('ythub', {
   removeSchedule: (id) => call('schedules:remove', id),
   setScheduleEnabled: (id, on) => call('schedules:setEnabled', id, on),
   runScheduleNow: (id) => call('schedules:runNow', id),
+
+  cloudStatus: () => call('cloud:status'),
+  connectCloud: () => call('cloud:connect'),
+  disconnectCloud: () => call('cloud:disconnect'),
+  setCloudEnabled: (on) => call('cloud:setEnabled', on),
+  syncCloudNow: () => call('cloud:syncNow'),
+  onCloudStatus: (fn) => {
+    const listener = (_e, s) => fn(s);
+    ipcRenderer.on('cloud:status', listener);
+    return () => ipcRenderer.removeListener('cloud:status', listener);
+  },
   onSchedulesUpdate: (fn) => {
     const listener = (_e, list) => fn(list);
     ipcRenderer.on('schedules:update', listener);

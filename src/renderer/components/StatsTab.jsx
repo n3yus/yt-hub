@@ -3,6 +3,7 @@ import { compact, ago } from '../format.js';
 import { go } from '../router.js';
 import { openJobDialog } from '../jobDialog.js';
 import ViewsChart from './ViewsChart.jsx';
+import ErrorNotice from './ErrorNotice.jsx';
 
 const dur = (sec) => (sec == null ? '–' : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`);
 const pct = (v) => (v == null ? '–' : `${v.toLocaleString('de-DE', { maximumFractionDigits: 1 })} %`);
@@ -107,7 +108,7 @@ export default function StatsTab({ channel, dataVersion }) {
           </>
         )}
         {busy === 'connect' && <p className="muted small">Im Browser das Google-Konto und den Kanal „{channel.name}“ auswählen und zustimmen.</p>}
-        {msg && <div className={'notice ' + (msg.err ? 'error' : 'ok')}>{msg.text}</div>}
+        {msg && <ErrorNotice text={msg.text} className={'notice ' + (msg.err ? 'error' : 'ok')} />}
       </div>
     );
   }
@@ -123,7 +124,6 @@ export default function StatsTab({ channel, dataVersion }) {
       <div className="board-bar">
         <span className="muted small">
           {data ? `Stand ${ago(data.fetchedAt)} · Daten bis ${new Date(data.range.to).toLocaleDateString('de-DE')} (YouTube liefert mit 1–3 Tagen Verzögerung)` : ''}
-          {conn?.error && <span className="err-text"> · {conn.error}</span>}
         </span>
         <div className="row tight">
           {connected ? (
@@ -137,7 +137,8 @@ export default function StatsTab({ channel, dataVersion }) {
           <button className="btn small" onClick={() => openJobDialog({ type: 'learnings', channel: channel.slug })}>🧠 Learnings ableiten</button>
         </div>
       </div>
-      {msg && <div className={'notice ' + (msg.err ? 'error' : 'ok')}>{msg.text}</div>}
+      {msg && <ErrorNotice text={msg.text} className={'notice ' + (msg.err ? 'error' : 'ok')} />}
+      {!msg && conn?.error && <ErrorNotice text={conn.error} />}
 
       {data && (
         <>

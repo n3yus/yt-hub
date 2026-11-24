@@ -2,7 +2,7 @@
 
 Desktop-App für YouTube-Kanäle: eigene und beobachtete Kanäle verwalten, Ideen recherchieren und Skripte schreiben – mit Aufträgen an Claude Code. Konzept: [KONZEPT.md](KONZEPT.md).
 
-**Stand: Phase 4** – YouTube Analytics für eigene Kanäle (Google-Anmeldung mit eigenem OAuth-Client, Statistik-Tab mit Kennzahlen, Verlauf und Video-Tabelle), Auftrag „Learnings ableiten“, geplante Aufträge mit Desktop-Benachrichtigung, Autostart; dazu Kanal-Seite mit Ideen-Board (Drag & Drop, eigene Ideen, Details), Skript-Ansicht (Sprechdauer, Kommentare an Absätzen, Überarbeiten-Auftrag, Versionen, Bearbeiten), Profil- und Recherche-Tab, automatische Updates (vorbereitet); dazu Aufträge an Claude Code (Ideen recherchieren, Idee aus Video, Skript schreiben, Kanal-Profil, freier Auftrag; im Hintergrund oder im Terminal) mit Auftrags-Liste und Fortschritt, Skills im Datenordner; dazu Willkommens-Assistent, Kanäle per ＋-Knopf (mit YouTube-Abgleich: Name, Bild, Abos, letzte 50 Videos), Feed der beobachteten Kanäle mit Ausreißer-Erkennung, Prüfintervall, Kontingent-Anzeige, Einstellungsseite, Windows-Installer.
+**Stand: 0.6.0** – Cloud-Sync des Datenordners mit Google Drive (Zwei-Wege, Konfliktkopien, abschaltbar); dazu YouTube Analytics für eigene Kanäle (Google-Anmeldung mit eigenem OAuth-Client, Statistik-Tab mit Kennzahlen, Verlauf und Video-Tabelle), Auftrag „Learnings ableiten“, geplante Aufträge mit Desktop-Benachrichtigung, Autostart; dazu Kanal-Seite mit Ideen-Board (Drag & Drop, eigene Ideen, Details), Skript-Ansicht (Sprechdauer, Kommentare an Absätzen, Überarbeiten-Auftrag, Versionen, Bearbeiten), Profil- und Recherche-Tab, automatische Updates (vorbereitet); dazu Aufträge an Claude Code (Ideen recherchieren, Idee aus Video, Skript schreiben, Kanal-Profil, freier Auftrag; im Hintergrund oder im Terminal) mit Auftrags-Liste und Fortschritt, Skills im Datenordner; dazu Willkommens-Assistent, Kanäle per ＋-Knopf (mit YouTube-Abgleich: Name, Bild, Abos, letzte 50 Videos), Feed der beobachteten Kanäle mit Ausreißer-Erkennung, Prüfintervall, Kontingent-Anzeige, Einstellungsseite, Windows-Installer.
 
 ## Entwickeln
 
@@ -29,6 +29,7 @@ electron/
   content.cjs    Ideen, Skripte, Recherche, Kommentare lesen/schreiben (nur erlaubte Pfade im Kanal-Ordner)
   google.cjs     Google-Anmeldung (OAuth Desktop, Loopback + PKCE), Tokens verschlüsselt
   analytics.cjs  YouTube-Analytics-Abruf → analytics.json im Kanal-Ordner
+  drivesync.cjs  Cloud-Sync mit Google Drive: Abgleich per MD5 gegen den letzten Stand, Konfliktkopien, Papierkorb statt Löschen
   schedules.cjs  geplante Aufträge (auftraege/plaene.json), Nachholen verpasster Termine
   updater.cjs    automatische Updates (electron-updater), aktiv sobald ein publish-Ziel eingerichtet ist
   assets/        CLAUDE.md und Skills (ythub-ideen, ythub-skript, ythub-profil), werden in den Datenordner kopiert
@@ -80,3 +81,12 @@ gh release view v0.5.0 --json assets --jq "[.assets[].name]"
 ```
 
 Installierte Apps prüfen beim Start und alle 6 Stunden, laden Updates im Hintergrund und installieren sie beim nächsten Neustart (oder sofort per Knopf in den Einstellungen).
+
+## Cloud-Sync (Google Drive)
+
+Optional, in den Einstellungen ein- und ausschaltbar. Nutzt den eigenen Google-OAuth-Client (zusätzlich die **Google Drive API** aktivieren) mit dem Recht `drive.file`: YT Hub sieht nur Dateien, die es selbst angelegt hat.
+
+- Synchronisiert den Datenordner mit dem Drive-Ordner „YT Hub Sync“ – beim Start, alle 10 Minuten und nach jedem fertigen Auftrag (nicht, während Claude im Hintergrund schreibt).
+- Nicht synchronisiert: `.claude/` (Skills installiert die App), Logs, temporäre Dateien und die YouTube-Caches `videos.json`/`analytics.json` (jeder Rechner holt sie selbst).
+- Auf beiden Seiten geändert → die lokale Fassung gewinnt, die Drive-Fassung wird als „… (Konflikt Drive <Datum>).md“ gespeichert. Bei `channel.json` und Auftrags-Dateien gewinnt still die lokale Fassung.
+- Gelöschtes wandert in den Papierkorb (lokal bzw. in Drive), nichts wird endgültig gelöscht. Nach einem Wechsel des Datenordners oder Drive-Kontos wird beim ersten Abgleich nichts gelöscht.

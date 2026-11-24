@@ -10,6 +10,7 @@ const DEFAULTS = {
   language: 'de',
   claudeLaunchMode: 'background', // 'background' | 'terminal'
   setupDone: false,
+  cloudSync: false, // Cloud-Sync mit Google Drive (aus, bis der Benutzer ihn einschaltet)
 };
 
 function createSettingsStore({ userDataDir, documentsDir, safeStorage }) {
@@ -79,13 +80,14 @@ function createSettingsStore({ userDataDir, documentsDir, safeStorage }) {
       claudeLaunchMode: s.claudeLaunchMode,
       setupDone: s.setupDone,
       lastFeedVisit: s.lastFeedVisit || null,
+      cloudSync: !!s.cloudSync,
       youtubeKey: raw.youtubeKey ? { set: true, hint: raw.youtubeKey.hint } : { set: false },
       encryptionAvailable: encryptionAvailable(),
     };
   }
 
   function update(patch) {
-    const allowed = ['dataDir', 'checkInterval', 'language', 'claudeLaunchMode', 'setupDone', 'lastFeedVisit'];
+    const allowed = ['dataDir', 'checkInterval', 'language', 'claudeLaunchMode', 'setupDone', 'lastFeedVisit', 'cloudSync'];
     const raw = readRaw();
     for (const k of allowed) if (k in patch) raw[k] = patch[k];
     writeRaw(raw);

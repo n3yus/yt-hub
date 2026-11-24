@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import ErrorNotice from '../components/ErrorNotice.jsx';
 
 const KEY_GUIDE = 'https://developers.google.com/youtube/v3/getting-started';
 const CLAUDE_GUIDE = 'https://code.claude.com/docs';
@@ -257,6 +258,7 @@ function GoogleSection() {
           <li>„OAuth-Zustimmungsbildschirm“ einrichten: Typ <strong>Extern</strong>, Status „Testen“, dein Google-Konto als <strong>Testnutzer</strong> eintragen.</li>
           <li>„Anmeldedaten → Anmeldedaten erstellen → OAuth-Client-ID“, Anwendungstyp <strong>Desktop-App</strong>.</li>
           <li>Client-ID und Client-Secret hier eintragen.</li>
+          <li>Für den Cloud-Sync zusätzlich die <strong>Google Drive API</strong> aktivieren.</li>
         </ol>
       )}
       {st.client.set && <p className="mono small">{st.client.id}</p>}
@@ -279,6 +281,80 @@ function GoogleSection() {
           ))}
         </div>
       )}
+    </section>
+  );
+}
+
+function CloudSection() {
+  const [st, setSt] = useState(null);
+  const [googleReady, setGoogleReady] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    window.ythub.cloudStatus().then(setSt);
+    return window.ythub.onCloudStatus(setSt);
+  }, []);
+  useEffect(() => {
+    window.ythub.googleStatus().then((g) => setGoogleReady(g.client.set));
+  }, [st?.enabled, st?.drive?.connected]);
+  if (!st) return null;
+
+  const run = (fn) => async () => {
+    setBusy(true);
+    setErr(null);
+    try { setSt(await fn()); } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+  const disconnect = async () => {
+    if (!window.confirm('Google Drive trennen? Der Cloud-Sync wird ausgeschaltet. Deine Dateien bleiben lokal und in Drive erhalten.')) return;
+    run(() => window.ythub.disconnectCloud())();
+  };
+  const last = st.last;
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Cloud-Sync mit Google Drive (optional)</h2>
+        <input type="checkbox" className="toggle" checked={st.enabled} onChange={run(() => window.ythub.setCloudEnabled(!st.enabled))} title={st.enabled ? 'Ausschalten' : 'Einschalten'} />
+      </div>
+      <p className="muted">
+        Hält deinen Datenordner (Kanäle, Ideen, Skripte, Recherchen, Pläne) mit dem Drive-Ordner „YT Hub Sync“ abgeglichen – als Backup und um auf mehreren
+        Rechnern zu arbeiten. YT Hub sieht nur Dateien, die es selbst in Drive angelegt hat. Wurde eine Datei auf zwei Rechnern geändert, bleiben beide Fassungen erhalten
+        (Kopie mit „Konflikt“ im Namen). YouTube-Zahlen werden nicht hochgeladen, jeder Rechner holt sie selbst.
+      </p>
+
+      {!st.enabled && <p className="muted small">Ausgeschaltet – YT Hub greift nicht auf Google Drive zu.</p>}
+
+      {st.enabled && !googleReady && (
+        <div className="notice"><span>Zuerst oben unter „YouTube Analytics“ einen Google-OAuth-Client eintragen und in der Google Cloud Console die <strong>Google Drive API</strong> aktivieren.</span></div>
+      )}
+
+      {st.enabled && googleReady && !st.drive.connected && (
+        <div className="row">
+          <button className="btn primary" disabled={busy} onClick={run(() => window.ythub.connectCloud())}>{busy ? 'Warte auf Anmeldung im Browser …' : 'Mit Google Drive verbinden'}</button>
+          <span className="muted small">Im Browser zustimmen, dass YT Hub eigene Dateien in deinem Drive anlegen darf.</span>
+        </div>
+      )}
+
+      {st.drive.connected && (
+        <>
+          <div className="cloud-account">
+            <span>☁ {st.drive.name || 'Google Drive'}{st.drive.email ? ` · ${st.drive.email}` : ''}</span>
+            <span className="muted small">
+              {st.running
+                ? `Synchronisiere … ${st.total ? `${st.done}/${st.total}` : ''}`
+                : last
+                  ? `Zuletzt ${new Date(last.at).toLocaleString('de-DE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${last.files} Dateien · ↑${last.uploaded} ↓${last.downloaded}${last.conflicts ? ` · ${last.conflicts} Konflikt(e)` : ''}`
+                  : st.enabled ? 'Noch nicht synchronisiert' : 'Sync ist ausgeschaltet'}
+            </span>
+          </div>
+          <div className="row">
+            <button className="btn ghost small" disabled={busy || st.running || !st.enabled} onClick={run(() => window.ythub.syncCloudNow())}>↻ Jetzt synchronisieren</button>
+            <button className="btn ghost small danger" onClick={disconnect}>Drive trennen</button>
+          </div>
+          {st.enabled && <p className="muted small">Automatisch beim Start, alle 10 Minuten und nach jedem fertigen Auftrag.</p>}
+        </>
+      )}
+      <ErrorNotice text={err || st.drive.error || st.error} />
     </section>
   );
 }
@@ -355,6 +431,7 @@ export default function Settings({ settings, onSettings }) {
       <YoutubeKeySection settings={settings} onSettings={onSettings} />
       <ClaudeSection settings={settings} onSettings={onSettings} />
       <GoogleSection />
+      <CloudSection />
       <DataDirSection settings={settings} onSettings={onSettings} />
       <GeneralSection settings={settings} onSettings={onSettings} />
       {info && <UpdateSection version={info.version} />}

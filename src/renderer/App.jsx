@@ -9,6 +9,7 @@ import Settings from './pages/Settings.jsx';
 import Welcome from './pages/Welcome.jsx';
 import SyncIndicator from './components/SyncIndicator.jsx';
 import NewJobDialog from './components/NewJobDialog.jsx';
+import CloudLine from './components/CloudLine.jsx';
 
 const NAV = [
   { route: '/', label: 'Kanäle', icon: '▦' },
@@ -119,6 +120,7 @@ export default function App() {
             ⬆ Update {update.version} bereit – neu starten
           </button>
         )}
+        <CloudLine />
         <SyncIndicator status={sync.status} hasKey={settings.youtubeKey.set} />
       </nav>
       <main className="content">{page}</main>

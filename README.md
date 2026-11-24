@@ -73,4 +73,10 @@ git tag v0.4.2; git push; git push origin v0.4.2
 $env:GH_TOKEN = (gh auth token); npm run release
 ```
 
+4. Prüfen, dass das Release drei Dateien hat (`latest.yml`, `YT-Hub-Setup-<version>.exe`, `.blockmap`). Fehlt etwas, die Dateien aus `release/` nachladen (Installer vorher in `YT-Hub-Setup-<version>.exe` umbenennen):
+
+```powershell
+gh release view v0.5.0 --json assets --jq "[.assets[].name]"
+```
+
 Installierte Apps prüfen beim Start und alle 6 Stunden, laden Updates im Hintergrund und installieren sie beim nächsten Neustart (oder sofort per Knopf in den Einstellungen).

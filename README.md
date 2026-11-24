@@ -57,8 +57,14 @@ Jedes Video wird mit dem Median der übrigen Videos desselben Formats im Kanal v
 Installer und Updates kommen aus den GitHub Releases von [n3yus/yt-hub](https://github.com/n3yus/yt-hub/releases).
 Neue Version veröffentlichen:
 
-1. `version` in `package.json` erhöhen.
-2. Mit angemeldeter GitHub CLI:
+1. `version` in `package.json` erhöhen und committen.
+2. Passenden Tag anlegen und pushen (GitHub verlangt ihn für veröffentlichte Releases):
+
+```powershell
+git tag v0.4.2; git push; git push origin v0.4.2
+```
+
+3. Mit angemeldeter GitHub CLI bauen und hochladen:
 
 ```powershell
 $env:GH_TOKEN = (gh auth token); npm run release

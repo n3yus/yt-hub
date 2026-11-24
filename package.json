@@ -1,7 +1,7 @@
 {
   "name": "ythub",
   "productName": "YT Hub",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Desktop-Hub für YouTube-Kanäle: Kanäle beobachten, Ideen recherchieren und Skripte schreiben mit Claude Code.",
   "main": "electron/main.cjs",
   "author": "YT Hub",
@@ -12,7 +12,8 @@
     "build": "vite build",
     "start": "vite build && electron .",
     "smoke": "vite build && cross-env YTHUB_SMOKE=1 electron .",
-    "dist": "vite build && electron-builder --win"
+    "dist": "vite build && electron-builder --win",
+    "release": "vite build && electron-builder --win --publish always"
   },
   "build": {
     "appId": "app.ythub.desktop",
@@ -40,6 +41,12 @@
     },
     "linux": {
       "target": "AppImage"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "n3yus",
+      "repo": "yt-hub",
+      "releaseType": "release"
     }
   },
   "devDependencies": {
@@ -57,5 +64,9 @@
   },
   "dependencies": {
     "electron-updater": "^6.8.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/n3yus/yt-hub.git"
   }
 }

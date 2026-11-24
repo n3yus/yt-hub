@@ -52,18 +52,16 @@ Jedes Video wird mit dem Median der übrigen Videos desselben Formats im Kanal v
 
 `npm run smoke` mit `YTHUB_SMOKE_CLAUDE=1` schickt zusätzlich einen echten kleinen Recherche-Auftrag (kostet ca. 0,60 $).
 
-## Automatische Updates einrichten
+## Releases und automatische Updates
 
-Der Update-Code ist eingebaut, braucht aber ein Veröffentlichungs-Ziel. Für GitHub Releases in `package.json` unter `build` ergänzen:
+Installer und Updates kommen aus den GitHub Releases von [n3yus/yt-hub](https://github.com/n3yus/yt-hub/releases).
+Neue Version veröffentlichen:
 
-```json
-"publish": { "provider": "github", "owner": "<github-name>", "repo": "<repo>" }
-```
-
-Dann mit einem GitHub-Token (`GH_TOKEN`, Recht „repo“) veröffentlichen:
+1. `version` in `package.json` erhöhen.
+2. Mit angemeldeter GitHub CLI:
 
 ```powershell
-$env:GH_TOKEN = "<token>"; npx vite build; npx electron-builder --win --publish always
+$env:GH_TOKEN = (gh auth token); npm run release
 ```
 
 Installierte Apps prüfen beim Start und alle 6 Stunden, laden Updates im Hintergrund und installieren sie beim nächsten Neustart (oder sofort per Knopf in den Einstellungen).

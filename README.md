@@ -59,26 +59,17 @@ Jedes Video wird mit dem Median der übrigen Videos desselben Formats im Kanal v
 ## Releases und automatische Updates
 
 Installer und Updates kommen aus den GitHub Releases von [n3yus/yt-hub](https://github.com/n3yus/yt-hub/releases).
-Neue Version veröffentlichen:
-
-1. `version` in `package.json` erhöhen und committen.
-2. Passenden Tag anlegen und pushen (GitHub verlangt ihn für veröffentlichte Releases):
+Neue Version veröffentlichen (GitHub CLI angemeldet):
 
 ```powershell
-git tag v0.4.2; git push; git push origin v0.4.2
+# 1. version in package.json erhöhen, committen
+git tag v0.6.1; git push; git push origin v0.6.1
+# 2. bauen, prüfen, hochladen
+npm run release
 ```
 
-3. Mit angemeldeter GitHub CLI bauen und hochladen:
-
-```powershell
-$env:GH_TOKEN = (gh auth token); npm run release
-```
-
-4. Prüfen, dass das Release drei Dateien hat (`latest.yml`, `YT-Hub-Setup-<version>.exe`, `.blockmap`). Fehlt etwas, die Dateien aus `release/` nachladen (Installer vorher in `YT-Hub-Setup-<version>.exe` umbenennen):
-
-```powershell
-gh release view v0.5.0 --json assets --jq "[.assets[].name]"
-```
+`scripts/release.mjs` baut ohne Veröffentlichen, prüft, dass `latest.yml` (Version, Prüfsumme, Größe) zum frischen Installer passt, legt dann das Release an, lädt Installer, `.blockmap` und `latest.yml` hoch und kontrolliert am Ende, dass alle drei da sind. `npm run release:check` macht nur Bauen und Prüfen.
+(Früher hat electron-builder Installer und Blockmap gleichzeitig hochgeladen; dabei ist das Anlegen des Releases manchmal doppelt passiert und Dateien fehlten.)
 
 Installierte Apps prüfen beim Start und alle 6 Stunden, laden Updates im Hintergrund und installieren sie beim nächsten Neustart (oder sofort per Knopf in den Einstellungen).
 

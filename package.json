@@ -13,7 +13,8 @@
     "start": "vite build && electron .",
     "smoke": "vite build && cross-env YTHUB_SMOKE=1 electron .",
     "dist": "vite build && electron-builder --win",
-    "release": "vite build && electron-builder --win --publish always"
+    "release": "node scripts/release.mjs",
+    "release:check": "node scripts/release.mjs --dry-run"
   },
   "build": {
     "appId": "app.ythub.desktop",

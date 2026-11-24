@@ -1,0 +1,61 @@
+{
+  "name": "ythub",
+  "productName": "YT Hub",
+  "version": "0.4.0",
+  "description": "Desktop-Hub für YouTube-Kanäle: Kanäle beobachten, Ideen recherchieren und Skripte schreiben mit Claude Code.",
+  "main": "electron/main.cjs",
+  "author": "YT Hub",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env YTHUB_DEV=1 electron .\"",
+    "build": "vite build",
+    "start": "vite build && electron .",
+    "smoke": "vite build && cross-env YTHUB_SMOKE=1 electron .",
+    "dist": "vite build && electron-builder --win"
+  },
+  "build": {
+    "appId": "app.ythub.desktop",
+    "productName": "YT Hub",
+    "files": [
+      "electron/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "YT Hub"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "cross-env": "^10.1.0",
+    "dompurify": "^3.5.0",
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0",
+    "marked": "^18.3.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
+  }
+}

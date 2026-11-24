@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+# Niemals echte Schlüssel einchecken
+settings.json
+*.local.json
+.env*
